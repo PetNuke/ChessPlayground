@@ -2,6 +2,8 @@
 This class is responsible for storing information about the current state of a chess game.
 Also responsible for determining the valid moves at the current state. It will also keep a move log.
 """
+
+
 BLANK_SPACE = "--"
 
 
@@ -25,8 +27,17 @@ class GameState():
         self.moveLog = []
 
     def makeMove(self, move):
-        self.board[move.startRow][move.startCol] = "--"
+        self.board[move.startRow][move.startCol] = BLANK_SPACE
         self.board[move.endRow][move.endCol] = move.pieceMoved
+
+        # Removes pawn that was captured
+        if move.enpassant:
+            assert move.startRow != move.endRow
+            assert move.startCol != move.endCol
+
+            print("makeMove: removing the captured pawn")
+            self.board[move.startRow][move.endCol] = BLANK_SPACE # TODO this line is not working
+
 
         # Castling rights adjustment -- This code is very messy should look for alternatives
         if move.pieceMoved[1] == 'K':
@@ -70,9 +81,16 @@ class GameState():
 
         move = self.moveLog[-1]
 
-        self.board[move.endRow][move.endCol] = move.pieceCaptured
-        self.board[move.startRow][move.startCol] = move.pieceMoved
-        self.whiteToMove = not self.whiteToMove
+        if move.enpassant:
+            self.board[move.endRow][move.endCol] = BLANK_SPACE
+            self.board[move.startRow][move.endCol] = move.pieceCaptured
+            self.board[move.startRow][move.startCol] = move.pieceMoved
+            self.whiteToMove = not self.whiteToMove
+
+        else:
+            self.board[move.endRow][move.endCol] = move.pieceCaptured
+            self.board[move.startRow][move.startCol] = move.pieceMoved
+            self.whiteToMove = not self.whiteToMove
 
         self.moveLog.pop()
 
@@ -86,32 +104,33 @@ class GameState():
 
         for x in possibleMoves:
             self.makeMove(x)
-            responses = self.getAllPossibleMoves()
+            responses = self.getAllPossibleMoves(validate=True)
 
             valid = True
             for i in responses:
-                print(i.getChessNotation())
+                # print(i.getChessNotation())
                 if i.pieceCaptured[1] == 'K':
-
                     valid = False
 
             if valid:
-                print("Adding", x.getChessNotation())
+                # print("Adding", x.getChessNotation())
                 validMoves.append(x)
             else:
-                print("Rejected", x.getChessNotation())
+                # print("Rejected", x.getChessNotation())
+                pass
 
             self.undoMove()
-
 
         validMoves.append(9)
         return validMoves
 
     """
     gets moves, not considering checks
+    
+    validate is to keep console logs clean of validation checks
     """
 
-    def getAllPossibleMoves(self):
+    def getAllPossibleMoves(self, validate=False):
         moves = []
 
         for row in range(len(self.board)):
@@ -132,11 +151,20 @@ class GameState():
                     if piece == 'K':
                         self.getKingMoves(row, col, moves)
 
+        if len(self.moveLog) != 0 and self.moveLog[-1].pieceMoved[1] == 'p' and (
+                self.moveLog[-1].startRow - self.moveLog[-1].endRow) in (-2, 2):
+            self.enpeasant(moves, validate=validate)
+            if not validate:
+                print("Searching for enpeasant")
+        else:
+            if not validate:
+                print("No enpeasant")
+
         return moves
 
     """Get pawn moves for pawn located at position and add moves to list"""
 
-    # TODO En peasant and promotions
+    # TODO and promotions
 
     def getPawnMoves(self, row, col, moves):
         if self.whiteToMove:
@@ -163,6 +191,45 @@ class GameState():
                 moves.append(Move((row, col), (row + 1, col - 1), self.board))
             if col + 1 < 8 and self.board[row + 1][col + 1][0] == "w":
                 moves.append(Move((row, col), (row + 1, col + 1), self.board))
+
+    # TODO
+    """Gets possible enpeasant moves"""
+
+    def enpeasant(self, moves, validate=False):
+        pawnMoved = (self.moveLog[-1].endRow, self.moveLog[-1].endCol)
+        if self.whiteToMove:
+            # pawn to left
+            if pawnMoved[1] - 1 >= 0 and self.board[pawnMoved[0]][pawnMoved[1] - 1] == 'wp':
+                moves.append(Move((pawnMoved[0], pawnMoved[1] - 1), (pawnMoved[0] - 1, pawnMoved[1]), self.board,
+                                  enpassant=True))
+
+                if not validate:
+                    print("Enpeasant to left")
+
+            # pawn to right
+            if pawnMoved[1] + 1 < 8 and self.board[pawnMoved[0]][pawnMoved[1] + 1] == 'wp':
+                moves.append(Move((pawnMoved[0], pawnMoved[1] + 1), (pawnMoved[0] - 1, pawnMoved[1]), self.board,
+                                  enpassant=True))
+
+                if not validate:
+                    print("Enpeasant to right")
+
+        else:
+            # pawn to left
+            if pawnMoved[1] - 1 >= 0 and self.board[pawnMoved[0]][pawnMoved[1] - 1] == 'bp':
+                moves.append(Move((pawnMoved[0], pawnMoved[1] - 1), (pawnMoved[0] + 1, pawnMoved[1]), self.board,
+                                  enpassant=True))
+
+                if not validate:
+                    print("Enpeasant to left")
+
+            # pawn to right
+            if pawnMoved[1] + 1 < 8 and self.board[pawnMoved[0]][pawnMoved[1] + 1] == 'bp':
+                moves.append(Move((pawnMoved[0], pawnMoved[1] + 1), (pawnMoved[0] + 1, pawnMoved[1]), self.board,
+                                  enpassant=True))
+
+                if not validate:
+                    print("Enpeasant to right")
 
     """Get moves for knight located at position and add moves to list"""
 
@@ -254,7 +321,6 @@ class GameState():
         if c < 8 and self.board[r][c][0] == ("b" * self.whiteToMove + "w" * (not self.whiteToMove)):
             moves.append(Move((row, col), (r, c), self.board))
 
-
         r = row
         c = col - 1
         while c >= 0 and self.board[r][c] == BLANK_SPACE:
@@ -264,7 +330,6 @@ class GameState():
         if c >= 0 and self.board[r][c][0] == ("b" * self.whiteToMove + "w" * (not self.whiteToMove)):
             moves.append(Move((row, col), (r, c), self.board))
 
-
         r = row + 1
         c = col
         while r < 8 and self.board[r][c] == BLANK_SPACE:
@@ -273,7 +338,6 @@ class GameState():
 
         if r < 8 and self.board[r][c][0] == ("b" * self.whiteToMove + "w" * (not self.whiteToMove)):
             moves.append(Move((row, col), (r, c), self.board))
-
 
         r = row - 1
         c = col
@@ -291,15 +355,19 @@ class GameState():
         self.getBishopMoves(row, col, moves)
 
     """Get moves for king located at position and add moves to list"""
+
     # TODO castling
 
     def getKingMoves(self, row, col, moves):
-        aroundKing = ((row + 1, col + 1), (row + 1, col), (row, col + 1), (row + 1, col - 1), (row - 1, col + 1), (row - 1, col), (row, col -1), (row - 1, col - 1))
+        aroundKing = (
+        (row + 1, col + 1), (row + 1, col), (row, col + 1), (row + 1, col - 1), (row - 1, col + 1), (row - 1, col),
+        (row, col - 1), (row - 1, col - 1))
 
         for square in aroundKing:
             try:
-                if square[0] >= 0 and square[1] >= 0 and self.board[square[0]][square[1]][0] != ("w" * self.whiteToMove + "b" * (not self.whiteToMove)):
-                    moves.append(Move((row, col), square, self.board) )
+                if square[0] >= 0 and square[1] >= 0 and self.board[square[0]][square[1]][0] != (
+                        "w" * self.whiteToMove + "b" * (not self.whiteToMove)):
+                    moves.append(Move((row, col), square, self.board))
             except IndexError:
                 pass
 
@@ -310,9 +378,9 @@ class GameState():
 
     """These two functions see if the king can castle for their respective color
     Doesn't check if king can be taken after because that is handled in valid moves, just if the other squares are under attack"""
+
     def castleWhiteChecker(self, moves):
         pass
-
 
     def castleBlackChecker(self, moves):
         pass
@@ -324,7 +392,11 @@ class Move():
     filesToCols = {"a": 0, "b": 1, "c": 2, "d": 3, "e": 4, "f": 5, "g": 6, "h": 7}
     colsToFiles = {v: k for k, v in filesToCols.items()}
 
-    def __init__(self, startSquare, endSquare, board):
+    def __init__(self, startSquare, endSquare, board, enpassant=False, pawnPromotion=False, castle=False):
+        self.enpassant = enpassant
+        self.pawnPromotion = pawnPromotion
+        self.castle = castle
+
         self.startRow = startSquare[0]
         self.startCol = startSquare[1]
 
@@ -332,7 +404,11 @@ class Move():
         self.endCol = endSquare[1]
 
         self.pieceMoved = board[self.startRow][self.startCol]
-        self.pieceCaptured = board[self.endRow][self.endCol]
+
+        if enpassant:
+            self.pieceCaptured = "wp" if self.pieceMoved == "bp" else "bp"
+        else:
+            self.pieceCaptured = board[self.endRow][self.endCol]
 
         # basically a hash function
         self.moveID = self.startRow * 1000 + self.startCol * 100 + self.endRow * 10 + self.endCol
