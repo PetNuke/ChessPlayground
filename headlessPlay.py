@@ -123,6 +123,7 @@ def to_fen(gs):
 
 
 def strip_check_marks(san):
+    san = san.replace("e.p.", "").replace("e.p", "")
     return san.replace("+", "").replace("#", "").replace("!", "").replace("?", "")
 
 
