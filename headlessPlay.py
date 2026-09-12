@@ -134,6 +134,8 @@ def move_matches_san(move, san):
     if san in ("O-O-O", "0-0-0"):
         return move.castle and move.endCol == 2
 
+    is_capture_san = "x" in san
+
     promotion = None
     if "=" in san:
         san, promotion = san.split("=", 1)
@@ -150,6 +152,11 @@ def move_matches_san(move, san):
     if dest_file not in FILES or dest_rank not in RANKS:
         return False
     if move.endCol != FILES[dest_file] or move.endRow != RANKS[dest_rank]:
+        return False
+
+    # Quiet SAN ("e5") must not match a capture; "x" is required ("dxe5").
+    is_capture_move = bool(move.enpassant or move.pieceCaptured != ChessEngine.BLANK_SPACE)
+    if is_capture_san != is_capture_move:
         return False
 
     if promotion:
