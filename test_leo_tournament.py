@@ -49,6 +49,25 @@ class LeoRatingTests(unittest.TestCase):
         self.assertAlmostEqual(ra, 1516.0)
         self.assertAlmostEqual(rb, 1484.0)
 
+    def test_fitted_ratings_ignore_game_order(self):
+        games = (
+            [("a", "b", 1.0)] * 6
+            + [("a", "c", 0.5)] * 6
+            + [("b", "c", 0.0)] * 6
+        )
+        names = ["a", "b", "c"]
+        forward = leoTournament.fit_leo_ratings(names, games)
+        backward = leoTournament.fit_leo_ratings(names, list(reversed(games)))
+        for name in names:
+            self.assertAlmostEqual(forward[name], backward[name], places=5)
+
+    def test_sweep_winner_rates_above_loser(self):
+        games = [("good", "bad", 1.0)] * 20
+        ratings = leoTournament.fit_leo_ratings(["good", "bad"], games)
+        self.assertGreater(ratings["good"], ratings["bad"])
+        self.assertAlmostEqual(
+            (ratings["good"] + ratings["bad"]) / 2.0, 1500.0, places=4)
+
     def test_default_games_per_pair_is_1000(self):
         self.assertEqual(leoTournament.DEFAULT_GAMES, 1000)
 

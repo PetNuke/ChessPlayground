@@ -272,7 +272,7 @@ def play_game(white_bot, black_bot, max_plies=DEFAULT_MAX_PLIES,
     return GameResult(0.5, "max-plies", max_plies)
 
 
-def _apply_result(record_a, record_b, pair, white_is_a, result, k):
+def _tally_result(record_a, record_b, pair, white_is_a, result):
     if white_is_a:
         pair.white_a += 1
         score_a = result.white_score
@@ -292,12 +292,47 @@ def _apply_result(record_a, record_b, pair, white_is_a, result, k):
         record_a.draws += 1
         record_b.draws += 1
         pair.draws += 1
-
-    record_a.rating, record_b.rating = update_ratings(
-        record_a.rating, record_b.rating, score_a, k=k)
+    return score_a
 
 
-def play_pair(bot_a, bot_b, n=DEFAULT_GAMES, k=DEFAULT_K, start=DEFAULT_START,
+def fit_leo_ratings(names, games, start=DEFAULT_START, k=DEFAULT_K, iterations=80):
+    """
+    Order-independent Leo ratings for a completed tournament.
+
+    `games` is a list of (name_a, name_b, score_a) with score_a in {1, 0.5, 0}.
+    Ratings are mean-centered on `start`. `k` is the fitting step size.
+    """
+    ratings = {name: float(start) for name in names}
+    played = {name: 0 for name in names}
+    for name_a, name_b, _score in games:
+        played[name_a] += 1
+        played[name_b] += 1
+    if not games:
+        return ratings
+
+    for _ in range(iterations):
+        deltas = {name: 0.0 for name in names}
+        for name_a, name_b, score_a in games:
+            expect_a = expected_score(ratings[name_a], ratings[name_b])
+            deltas[name_a] += score_a - expect_a
+            deltas[name_b] += (1.0 - score_a) - (1.0 - expect_a)
+        largest = 0.0
+        for name in names:
+            if played[name] == 0:
+                continue
+            step = k * deltas[name] / float(played[name])
+            ratings[name] += step
+            largest = max(largest, abs(step))
+        mean = sum(ratings[name] for name in names) / float(len(names))
+        shift = start - mean
+        for name in names:
+            ratings[name] += shift
+        if largest < 0.01:
+            break
+    return ratings
+
+
+def play_pair(bot_a, bot_b, n=DEFAULT_GAMES, start=DEFAULT_START,
               max_plies=DEFAULT_MAX_PLIES, records=None, progress=None,
               pair_index=1, pair_count=1):
     """Play n games between two bots. bot_a is white on even game indices."""
@@ -309,6 +344,7 @@ def play_pair(bot_a, bot_b, n=DEFAULT_GAMES, k=DEFAULT_K, start=DEFAULT_START,
     pair = PairRecord(bot_a.name, bot_b.name)
     record_a = records[bot_a.name]
     record_b = records[bot_b.name]
+    games = []
     for i in range(n):
         white_is_a = (i % 2 == 0)
         if white_is_a:
@@ -316,10 +352,11 @@ def play_pair(bot_a, bot_b, n=DEFAULT_GAMES, k=DEFAULT_K, start=DEFAULT_START,
         else:
             white_bot, black_bot = bot_b, bot_a
         result = play_game(white_bot, black_bot, max_plies=max_plies)
-        _apply_result(record_a, record_b, pair, white_is_a, result, k)
+        score_a = _tally_result(record_a, record_b, pair, white_is_a, result)
+        games.append((bot_a.name, bot_b.name, score_a))
         if progress is not None:
             progress(pair_index, pair_count, i + 1, n, bot_a, bot_b, result)
-    return pair
+    return pair, games
 
 
 def run_tournament(bots, n=DEFAULT_GAMES, k=DEFAULT_K, start=DEFAULT_START,
@@ -332,14 +369,20 @@ def run_tournament(bots, n=DEFAULT_GAMES, k=DEFAULT_K, start=DEFAULT_START,
 
     records = {bot.name: BotRecord(bot.name, start) for bot in bots}
     pairs = []
+    all_games = []
     pair_list = list(itertools.combinations(bots, 2))
     pair_count = len(pair_list)
     for index, (bot_a, bot_b) in enumerate(pair_list, start=1):
-        pair = play_pair(
-            bot_a, bot_b, n=n, k=k, start=start, max_plies=max_plies,
+        pair, games = play_pair(
+            bot_a, bot_b, n=n, start=start, max_plies=max_plies,
             records=records, progress=progress,
             pair_index=index, pair_count=pair_count)
         pairs.append(pair)
+        all_games.extend(games)
+
+    fitted = fit_leo_ratings(names, all_games, start=start, k=k)
+    for rec in records.values():
+        rec.rating = fitted[rec.name]
 
     ranking = sorted(
         records.values(),
@@ -416,7 +459,9 @@ def main(argv=None):
         "--bots", default="random,capture,greedy",
         help="comma-separated bot kinds: %s" % ", ".join(sorted(BOT_KINDS)))
     parser.add_argument("--seed", type=int, default=0, help="RNG seed")
-    parser.add_argument("--k", type=float, default=DEFAULT_K, help="Leo K-factor")
+    parser.add_argument(
+        "--k", type=float, default=DEFAULT_K,
+        help="Leo fitting step size (default: %s)" % DEFAULT_K)
     parser.add_argument(
         "--start", type=float, default=DEFAULT_START, help="starting rating")
     parser.add_argument(
