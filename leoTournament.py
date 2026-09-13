@@ -118,6 +118,59 @@ class GreedyBot:
         return self.rng.choice(pool)
 
 
+class HunterBot:
+    """Takes mate in one, avoids stalemate, and keeps enough material to mate."""
+
+    def __init__(self, name="hunter", rng=None):
+        self.name = name
+        self.rng = rng if rng is not None else random.Random()
+
+    def choose(self, gs, legal):
+        if not legal:
+            return None
+        white = gs.whiteToMove
+        my_mat = _material_of(gs.board, white)
+        opp_mat = _material_of(gs.board, not white)
+        ahead = my_mat > opp_mat
+        behind = my_mat < opp_mat
+        endgame = opp_mat < 400
+
+        probed = [(move, _probe_move(gs, move, white)) for move in legal]
+        mates = [move for move, out in probed if out.mate]
+        if mates:
+            return self.rng.choice(mates)
+
+        playable = [(move, out) for move, out in probed if not out.stalemate]
+        if not playable:
+            playable = probed
+
+        scored = []
+        for move, out in playable:
+            value = _material_gain(move)
+            if out.check:
+                value += 80 if (ahead and endgame) else 5000
+            if move.pieceMoved[1] == "p" or move.pawnPromotion:
+                value += 1000
+            if out.approach > 0:
+                value += (250 if endgame else 30) * out.approach
+            if ahead:
+                value -= 25 * out.replies
+                value += 120 * out.opp_edge
+            if out.opp_capture > _material_gain(move):
+                value -= 20 * (out.opp_capture - _material_gain(move))
+            if out.dead:
+                if ahead:
+                    value -= 50000
+                elif behind:
+                    value += 4000
+                else:
+                    value -= 2000
+            scored.append((value, move))
+        best = max(item[0] for item in scored)
+        pool = [move for value, move in scored if value == best]
+        return self.rng.choice(pool)
+
+
 class FirstBot:
     """Always plays the first legal move in engine order."""
 
@@ -144,9 +197,89 @@ BOT_KINDS = {
     "random": RandomBot,
     "capture": CaptureBot,
     "greedy": GreedyBot,
+    "hunter": HunterBot,
     "first": FirstBot,
     "resign": ResignBot,
 }
+
+DEFAULT_BOTS = "random,greedy,hunter"
+
+
+def _material_of(board, white):
+    color = "w" if white else "b"
+    total = 0
+    for row in board:
+        for piece in row:
+            if piece[0] == color and piece[1] != "K":
+                total += PIECE_VALUES.get(piece[1], 0)
+    return total
+
+
+def _kings(board):
+    white_king = black_king = None
+    for row in range(8):
+        for col in range(8):
+            piece = board[row][col]
+            if piece == "wK":
+                white_king = (row, col)
+            elif piece == "bK":
+                black_king = (row, col)
+    return white_king, black_king
+
+
+def _king_distance(a, b):
+    if a is None or b is None:
+        return 0
+    return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+
+
+class _Probe:
+    __slots__ = (
+        "mate", "stalemate", "check", "dead",
+        "approach", "opp_capture", "replies", "opp_edge",
+    )
+
+    def __init__(self, mate, stalemate, check, dead, approach, opp_capture, replies, opp_edge):
+        self.mate = mate
+        self.stalemate = stalemate
+        self.check = check
+        self.dead = dead
+        self.approach = approach
+        self.opp_capture = opp_capture
+        self.replies = replies
+        self.opp_edge = opp_edge
+
+
+def _probe_move(gs, move, mover_is_white):
+    before = _kings(gs.board)
+    gs.makeMove(move)
+    replies = gs.getValidMoves()
+    check = headlessPlay.in_check(gs)
+    dead = insufficient_material(gs.board)
+    after = _kings(gs.board)
+    opp_capture = 0
+    for reply in replies:
+        gain = _material_gain(reply)
+        if gain > opp_capture:
+            opp_capture = gain
+    gs.undoMove()
+
+    mate = len(replies) == 0 and check
+    stalemate = len(replies) == 0 and not check
+    if mover_is_white:
+        my_before, opp_before = before
+        my_after, opp_after = after
+    else:
+        opp_before, my_before = before
+        opp_after, my_after = after
+    approach = _king_distance(my_before, opp_before) - _king_distance(my_after, opp_after)
+    opp_edge = 0
+    if opp_after is not None:
+        if opp_after[0] in (0, 7):
+            opp_edge += 1
+        if opp_after[1] in (0, 7):
+            opp_edge += 1
+    return _Probe(mate, stalemate, check, dead, approach, opp_capture, len(replies), opp_edge)
 
 
 def _material_gain(move):
@@ -456,7 +589,7 @@ def main(argv=None):
         "-n", "--games", type=int, default=DEFAULT_GAMES,
         help="games each pair plays (default: %s)" % DEFAULT_GAMES)
     parser.add_argument(
-        "--bots", default="random,capture,greedy",
+        "--bots", default=DEFAULT_BOTS,
         help="comma-separated bot kinds: %s" % ", ".join(sorted(BOT_KINDS)))
     parser.add_argument("--seed", type=int, default=0, help="RNG seed")
     parser.add_argument(

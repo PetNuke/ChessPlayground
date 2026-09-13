@@ -186,6 +186,78 @@ class BotChoiceTests(unittest.TestCase):
             move = bot.choose(gs, legal)
             self.assertIn(move.moveID, ids)
 
+    def test_hunter_plays_mate_in_one(self):
+        gs = ChessEngine.GameState()
+        for token in ["f3", "e5", "g4"]:
+            gs.makeMove(headlessPlay.find_legal_move(gs, token))
+        legal = gs.getValidMoves()
+        bot = leoTournament.HunterBot("hunter", rng=random.Random(0))
+        move = bot.choose(gs, legal)
+        gs.makeMove(move)
+        self.assertEqual(gs.getValidMoves(), [])
+        self.assertTrue(headlessPlay.in_check(gs))
+
+    def test_hunter_prefers_mate_over_stalemate(self):
+        gs = _bare_board()
+        gs.board[2][0] = "wK"  # a6
+        gs.board[2][1] = "wQ"  # b6
+        gs.board[0][0] = "bK"  # a8
+        legal = gs.getValidMoves()
+        bot = leoTournament.HunterBot("hunter", rng=random.Random(0))
+        move = bot.choose(gs, legal)
+        gs.makeMove(move)
+        self.assertEqual(gs.getValidMoves(), [])
+        self.assertTrue(headlessPlay.in_check(gs))
+
+    def test_hunter_does_not_take_into_insufficient_material(self):
+        gs = _bare_board()
+        gs.board[4][4] = "wK"  # e4
+        gs.board[0][1] = "wB"  # b8
+        gs.board[2][4] = "bK"  # e6
+        gs.board[1][0] = "bN"  # a7
+        legal = gs.getValidMoves()
+        take = [m for m in legal if m.getChessNotation() == "b8a7"]
+        self.assertTrue(take, "expected Bxa7 to be legal")
+        bot = leoTournament.HunterBot("hunter", rng=random.Random(0))
+        move = bot.choose(gs, legal)
+        self.assertNotEqual(move.getChessNotation(), "b8a7")
+
+    def test_hunter_converts_king_and_queen_vs_king(self):
+        gs = _bare_board()
+        gs.board[7][0] = "wK"  # a1
+        gs.board[7][3] = "wQ"  # d1
+        gs.board[0][0] = "bK"  # a8
+        game = headlessPlay.HeadlessGame()
+        game.gs = gs
+        result = leoTournament.play_game(
+            leoTournament.HunterBot("hunter", rng=random.Random(0)),
+            leoTournament.FirstBot("first"),
+            game=game,
+            max_plies=80,
+        )
+        self.assertEqual(result.reason, "checkmate")
+        self.assertEqual(result.white_score, 1.0)
+
+    def test_hunter_has_fewer_draws_against_greedy_than_greedy_vs_itself(self):
+        hunter_pair = leoTournament.run_tournament(
+            leoTournament.make_bots(["hunter", "greedy"], seed=1), n=4)
+        greedy_pair = leoTournament.run_tournament(
+            leoTournament.make_bots(["greedy", "greedy"], seed=1), n=4)
+        self.assertLess(hunter_pair.pairs[0].draws, greedy_pair.pairs[0].draws)
+        ranking = {rec.name: rec for rec in hunter_pair.records}
+        self.assertGreaterEqual(ranking["hunter"].wins, ranking["greedy"].wins)
+
+
+def _bare_board():
+    gs = ChessEngine.GameState()
+    gs.board = [[ChessEngine.BLANK_SPACE] * 8 for _ in range(8)]
+    gs.whiteCanCastleKing = False
+    gs.whiteCanCastleQueen = False
+    gs.blackCanCastleKing = False
+    gs.blackCanCastleQueen = False
+    gs.moveLog = []
+    return gs
+
 
 class CliTests(unittest.TestCase):
     def test_cli_default_games_is_1000(self):
@@ -199,6 +271,19 @@ class CliTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("1000", proc.stdout)
         self.assertIn("games each pair plays", proc.stdout)
+        self.assertEqual(leoTournament.DEFAULT_BOTS, "random,greedy,hunter")
+        self.assertIn("hunter", proc.stdout)
+
+    def test_cli_lists_hunter(self):
+        proc = subprocess.run(
+            [sys.executable, "leoTournament.py", "--list-bots"],
+            cwd=os.path.dirname(os.path.abspath(__file__)) or ".",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("hunter", proc.stdout)
 
     def test_cli_short_tournament(self):
         proc = subprocess.run(
