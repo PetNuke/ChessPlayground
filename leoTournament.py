@@ -14,6 +14,7 @@ import sys
 
 import ChessEngine
 import headlessPlay
+import searchBot
 
 DEFAULT_GAMES = 1000
 DEFAULT_K = 32
@@ -198,6 +199,8 @@ BOT_KINDS = {
     "capture": CaptureBot,
     "greedy": GreedyBot,
     "hunter": HunterBot,
+    "search1": searchBot.Search1Bot,
+    "search2": searchBot.Search2Bot,
     "first": FirstBot,
     "resign": ResignBot,
 }
