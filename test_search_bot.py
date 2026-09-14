@@ -87,6 +87,26 @@ class SearchBotTests(unittest.TestCase):
         self.assertIs(random_bot.eval_fn, searchBot.random_eval)
         self.assertIs(value_bot.eval_fn, searchBot.piece_value_eval)
         self.assertIs(rules_bot.eval_fn, searchBot.rules_eval)
+        self.assertIsNone(random_bot.max_nodes)
+        self.assertIsNone(value_bot.max_nodes)
+        self.assertIsNone(rules_bot.max_nodes)
+
+    def test_search8_krk_searches_beyond_old_node_cap(self):
+        gs = ChessEngine.GameState()
+        gs.board = [[ChessEngine.BLANK_SPACE] * 8 for _ in range(8)]
+        gs.board[7][0] = "wK"
+        gs.board[7][7] = "wR"
+        gs.board[0][7] = "bK"
+        gs.whiteCanCastleKing = False
+        gs.whiteCanCastleQueen = False
+        gs.blackCanCastleKing = False
+        gs.blackCanCastleQueen = False
+        gs.moveLog = []
+        bot = searchBot.Search8ValueBot(rng=random.Random(0))
+        move = bot.choose(gs, gs.getValidMoves())
+        self.assertIsNotNone(move)
+        self.assertIsNone(bot.max_nodes)
+        self.assertGreater(bot._nodes, 400)
 
     def test_rules_eval_rewards_extra_queen_and_center(self):
         start = ChessEngine.GameState()

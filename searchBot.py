@@ -13,6 +13,8 @@ Mate in one is always chosen when it exists, before any eval.
 from __future__ import annotations
 
 import random
+import sys
+import time
 
 import ChessEngine
 import headlessPlay
@@ -21,8 +23,6 @@ PIECE_VALUES = {"p": 100, "N": 320, "B": 330, "R": 500, "Q": 900, "K": 0}
 MATE_SCORE = 100000
 INF = 10 ** 9
 SEARCH8_DEPTH = 8
-# Cap so a full-field tournament can finish; iterative deepening still aims at 8.
-SEARCH8_MAX_NODES = 400
 
 BLANK = ChessEngine.BLANK_SPACE
 
@@ -370,6 +370,23 @@ def mate_in_one_move(gs, legal):
     return None
 
 
+def _tt_key(gs):
+    ep = None
+    if gs.moveLog:
+        last = gs.moveLog[-1]
+        if last.pieceMoved[1] == "p" and abs(last.startRow - last.endRow) == 2:
+            ep = (last.endRow, last.endCol)
+    return (
+        tuple(tuple(row) for row in gs.board),
+        gs.whiteToMove,
+        gs.whiteCanCastleKing,
+        gs.whiteCanCastleQueen,
+        gs.blackCanCastleKing,
+        gs.blackCanCastleQueen,
+        ep,
+    )
+
+
 class SearchBot:
     """Negamax search. Params: depth (plies) and eval_fn(gs) -> int."""
 
@@ -384,6 +401,8 @@ class SearchBot:
         self.rng = rng if rng is not None else random.Random()
         self.max_nodes = max_nodes
         self._nodes = 0
+        self._tt = {}
+        self.verbose = depth >= 8
 
     def choose(self, gs, legal):
         if not legal:
@@ -393,16 +412,29 @@ class SearchBot:
             return mate
 
         self._nodes = 0
-        best_moves = list(legal)
+        self._tt = {}
+        ordered = _order_moves(list(legal))
+        best_moves = [ordered[0]]
+        started = time.time()
         for search_depth in range(1, self.depth + 1):
             if self.max_nodes is not None and self._nodes >= self.max_nodes:
                 break
             try:
-                _score, moves = self._root_search(gs, legal, search_depth)
+                _score, moves = self._root_search(gs, ordered, search_depth)
             except _NodeLimit:
                 break
             if moves:
                 best_moves = moves
+                picked = {id(move) for move in moves}
+                ordered = moves + [move for move in ordered if id(move) not in picked]
+            if self.verbose:
+                notation = best_moves[0].getChessNotation() if best_moves else "-"
+                sys.stderr.write(
+                    "%s  d=%d  nodes=%d  %.1fs  score=%d  pv=%s\n"
+                    % (self.name, search_depth, self._nodes,
+                       time.time() - started, _score, notation)
+                )
+                sys.stderr.flush()
             if _score >= MATE_SCORE - 400:
                 break
         return self.rng.choice(best_moves)
@@ -410,10 +442,11 @@ class SearchBot:
     def _root_search(self, gs, legal, depth):
         best_score = -INF
         best_moves = []
-        for move in _order_moves(legal):
+        alpha = -INF
+        for move in legal:
             gs.makeMove(move)
             try:
-                score = -self._negamax(gs, depth - 1, -INF, INF, 1)
+                score = -self._negamax(gs, depth - 1, -INF, -alpha, 1)
             except _NodeLimit:
                 gs.undoMove()
                 raise
@@ -423,12 +456,34 @@ class SearchBot:
                 best_moves = [move]
             elif score == best_score:
                 best_moves.append(move)
+            if score > alpha:
+                alpha = score
         return best_score, best_moves
+
+    def _store_tt(self, key, depth, flag, val):
+        old = self._tt.get(key)
+        if old is None or old[0] <= depth:
+            self._tt[key] = (depth, flag, val)
 
     def _negamax(self, gs, depth, alpha, beta, ply):
         self._nodes += 1
         if self.max_nodes is not None and self._nodes >= self.max_nodes:
             raise _NodeLimit()
+
+        key = _tt_key(gs)
+        cached = self._tt.get(key)
+        if cached is not None:
+            stored_depth, flag, val = cached
+            if stored_depth >= depth:
+                if flag == "exact":
+                    return val
+                if flag == "low" and val >= beta:
+                    return val
+                if flag == "high" and val <= alpha:
+                    return val
+
+        if depth == 0:
+            return self.eval_fn(gs)
 
         legal = gs.getValidMoves()
         if not legal:
@@ -438,9 +493,7 @@ class SearchBot:
         if _insufficient_material(gs.board):
             return 0
 
-        if depth == 0:
-            return self.eval_fn(gs)
-
+        orig_alpha = alpha
         best = -INF
         for move in _order_moves(legal):
             gs.makeMove(move)
@@ -452,6 +505,13 @@ class SearchBot:
                 alpha = score
             if alpha >= beta:
                 break
+        if best <= orig_alpha:
+            flag = "high"
+        elif best >= beta:
+            flag = "low"
+        else:
+            flag = "exact"
+        self._store_tt(key, depth, flag, best)
         return best
 
 
@@ -470,27 +530,21 @@ class Search2Bot(SearchBot):
 
 
 class Search8RandomBot(SearchBot):
-    """Alpha-beta search, depth 8, random eval. Mate in one is always played."""
+    """Alpha-beta search, full depth 8, random eval. Mate in one is always played."""
 
     def __init__(self, name="search8random", rng=None):
-        SearchBot.__init__(
-            self, SEARCH8_DEPTH, random_eval, name=name, rng=rng,
-            max_nodes=SEARCH8_MAX_NODES)
+        SearchBot.__init__(self, SEARCH8_DEPTH, random_eval, name=name, rng=rng)
 
 
 class Search8ValueBot(SearchBot):
-    """Alpha-beta search, depth 8, piece-value eval. Mate in one is always played."""
+    """Alpha-beta search, full depth 8, piece-value eval. Mate in one is always played."""
 
     def __init__(self, name="search8value", rng=None):
-        SearchBot.__init__(
-            self, SEARCH8_DEPTH, piece_value_eval, name=name, rng=rng,
-            max_nodes=SEARCH8_MAX_NODES)
+        SearchBot.__init__(self, SEARCH8_DEPTH, piece_value_eval, name=name, rng=rng)
 
 
 class Search8RulesBot(SearchBot):
-    """Alpha-beta search, depth 8, many positional rules. Mate in one is always played."""
+    """Alpha-beta search, full depth 8, many positional rules. Mate in one is always played."""
 
     def __init__(self, name="search8rules", rng=None):
-        SearchBot.__init__(
-            self, SEARCH8_DEPTH, rules_eval, name=name, rng=rng,
-            max_nodes=SEARCH8_MAX_NODES)
+        SearchBot.__init__(self, SEARCH8_DEPTH, rules_eval, name=name, rng=rng)
