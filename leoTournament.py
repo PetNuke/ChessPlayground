@@ -201,11 +201,15 @@ BOT_KINDS = {
     "hunter": HunterBot,
     "search1": searchBot.Search1Bot,
     "search2": searchBot.Search2Bot,
+    "search8random": searchBot.Search8RandomBot,
+    "search8value": searchBot.Search8ValueBot,
+    "search8rules": searchBot.Search8RulesBot,
     "first": FirstBot,
     "resign": ResignBot,
 }
 
 DEFAULT_BOTS = "random,greedy,hunter"
+ALL_BOTS = tuple(BOT_KINDS.keys())
 
 
 def _material_of(board, white):
@@ -553,6 +557,8 @@ def format_report(result):
 
 def make_bots(kinds, seed=0):
     """Build uniquely named bots from kind strings such as ['random', 'capture']."""
+    if list(kinds) == ["all"]:
+        kinds = list(ALL_BOTS)
     counts = {}
     for kind in kinds:
         if kind not in BOT_KINDS:
@@ -593,7 +599,8 @@ def main(argv=None):
         help="games each pair plays (default: %s)" % DEFAULT_GAMES)
     parser.add_argument(
         "--bots", default=DEFAULT_BOTS,
-        help="comma-separated bot kinds: %s" % ", ".join(sorted(BOT_KINDS)))
+        help="comma-separated bot kinds, or 'all' (%s)"
+        % ", ".join(sorted(BOT_KINDS)))
     parser.add_argument("--seed", type=int, default=0, help="RNG seed")
     parser.add_argument(
         "--k", type=float, default=DEFAULT_K,

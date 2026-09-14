@@ -66,6 +66,47 @@ class SearchBotTests(unittest.TestCase):
         ranking = {rec.name: rec for rec in result.records}
         self.assertEqual(ranking["search1"].wins, 2)
 
+    def test_random_eval_still_plays_mate_in_one(self):
+        gs = ChessEngine.GameState()
+        for token in ["f3", "e5", "g4"]:
+            gs.makeMove(headlessPlay.find_legal_move(gs, token))
+        legal = gs.getValidMoves()
+        bot = searchBot.SearchBot(
+            8, searchBot.random_eval, rng=random.Random(0), max_nodes=50)
+        move = bot.choose(gs, legal)
+        gs.makeMove(move)
+        self.assertEqual(gs.getValidMoves(), [])
+        self.assertTrue(headlessPlay.in_check(gs))
+
+    def test_depth_8_bots_use_requested_eval(self):
+        random_bot, value_bot, rules_bot = leoTournament.make_bots(
+            ["search8random", "search8value", "search8rules"], seed=0)
+        self.assertEqual(random_bot.depth, 8)
+        self.assertEqual(value_bot.depth, 8)
+        self.assertEqual(rules_bot.depth, 8)
+        self.assertIs(random_bot.eval_fn, searchBot.random_eval)
+        self.assertIs(value_bot.eval_fn, searchBot.piece_value_eval)
+        self.assertIs(rules_bot.eval_fn, searchBot.rules_eval)
+
+    def test_rules_eval_rewards_extra_queen_and_center(self):
+        start = ChessEngine.GameState()
+        extra = ChessEngine.GameState()
+        extra.board[4][0] = "wQ"
+        self.assertGreater(searchBot.rules_eval(extra), searchBot.rules_eval(start))
+        center = ChessEngine.GameState()
+        center.makeMove(headlessPlay.find_legal_move(center, "e4"))
+        center.whiteToMove = True
+        self.assertGreater(searchBot.rules_eval(center), searchBot.rules_eval(start))
+
+    def test_all_kinds_are_buildable(self):
+        bots = leoTournament.make_bots(["all"], seed=1)
+        self.assertEqual(len(bots), len(leoTournament.BOT_KINDS))
+        names = [bot.name for bot in bots]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertIn("search8rules", names)
+        self.assertIn("hunter", names)
+        self.assertIn("resign", names)
+
 
 if __name__ == "__main__":
     unittest.main()
