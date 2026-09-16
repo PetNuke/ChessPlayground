@@ -284,6 +284,9 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("hunter", proc.stdout)
+        self.assertIn("search8value", proc.stdout)
+        self.assertIn("search8rules", proc.stdout)
+        self.assertNotIn("search8random", proc.stdout)
 
     def test_cli_short_tournament(self):
         proc = subprocess.run(

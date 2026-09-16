@@ -529,13 +529,6 @@ class Search2Bot(SearchBot):
         SearchBot.__init__(self, 2, greedy_eval, name=name, rng=rng)
 
 
-class Search8RandomBot(SearchBot):
-    """Alpha-beta search, full depth 8, random eval. Mate in one is always played."""
-
-    def __init__(self, name="search8random", rng=None):
-        SearchBot.__init__(self, SEARCH8_DEPTH, random_eval, name=name, rng=rng)
-
-
 class Search8ValueBot(SearchBot):
     """Alpha-beta search, full depth 8, piece-value eval. Mate in one is always played."""
 

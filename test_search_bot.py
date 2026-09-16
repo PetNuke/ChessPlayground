@@ -79,17 +79,15 @@ class SearchBotTests(unittest.TestCase):
         self.assertTrue(headlessPlay.in_check(gs))
 
     def test_depth_8_bots_use_requested_eval(self):
-        random_bot, value_bot, rules_bot = leoTournament.make_bots(
-            ["search8random", "search8value", "search8rules"], seed=0)
-        self.assertEqual(random_bot.depth, 8)
+        value_bot, rules_bot = leoTournament.make_bots(
+            ["search8value", "search8rules"], seed=0)
         self.assertEqual(value_bot.depth, 8)
         self.assertEqual(rules_bot.depth, 8)
-        self.assertIs(random_bot.eval_fn, searchBot.random_eval)
         self.assertIs(value_bot.eval_fn, searchBot.piece_value_eval)
         self.assertIs(rules_bot.eval_fn, searchBot.rules_eval)
-        self.assertIsNone(random_bot.max_nodes)
         self.assertIsNone(value_bot.max_nodes)
         self.assertIsNone(rules_bot.max_nodes)
+        self.assertNotIn("search8random", leoTournament.BOT_KINDS)
 
     def test_search8_krk_searches_beyond_old_node_cap(self):
         gs = ChessEngine.GameState()
@@ -124,6 +122,8 @@ class SearchBotTests(unittest.TestCase):
         names = [bot.name for bot in bots]
         self.assertEqual(len(names), len(set(names)))
         self.assertIn("search8rules", names)
+        self.assertIn("search8value", names)
+        self.assertNotIn("search8random", names)
         self.assertIn("hunter", names)
         self.assertIn("resign", names)
 
