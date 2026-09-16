@@ -6,8 +6,8 @@ leaf evaluator: higher is better for the side to move.
 
 Mate in one is always chosen when it exists, before any eval.
 
-    bot = SearchBot(depth=8, eval_fn=greedy_eval)
-    bot = SearchBot(depth=8, eval_fn=rules_eval, name="mine")
+    bot = SearchBot(depth=7, eval_fn=greedy_eval)
+    bot = SearchBot(depth=7, eval_fn=rules_eval, name="mine")
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import headlessPlay
 PIECE_VALUES = {"p": 100, "N": 320, "B": 330, "R": 500, "Q": 900, "K": 0}
 MATE_SCORE = 100000
 INF = 10 ** 9
-SEARCH8_DEPTH = 8
+SEARCH7_DEPTH = 7
 
 BLANK = ChessEngine.BLANK_SPACE
 
@@ -402,7 +402,7 @@ class SearchBot:
         self.max_nodes = max_nodes
         self._nodes = 0
         self._tt = {}
-        self.verbose = depth >= 8
+        self.verbose = depth >= 7
 
     def choose(self, gs, legal):
         if not legal:
@@ -529,15 +529,15 @@ class Search2Bot(SearchBot):
         SearchBot.__init__(self, 2, greedy_eval, name=name, rng=rng)
 
 
-class Search8ValueBot(SearchBot):
-    """Alpha-beta search, full depth 8, piece-value eval. Mate in one is always played."""
+class Search7ValueBot(SearchBot):
+    """Alpha-beta search, full depth 7, piece-value eval. Mate in one is always played."""
 
-    def __init__(self, name="search8value", rng=None):
-        SearchBot.__init__(self, SEARCH8_DEPTH, piece_value_eval, name=name, rng=rng)
+    def __init__(self, name="search7value", rng=None):
+        SearchBot.__init__(self, SEARCH7_DEPTH, piece_value_eval, name=name, rng=rng)
 
 
-class Search8RulesBot(SearchBot):
-    """Alpha-beta search, full depth 8, many positional rules. Mate in one is always played."""
+class Search7RulesBot(SearchBot):
+    """Alpha-beta search, full depth 7, many positional rules. Mate in one is always played."""
 
-    def __init__(self, name="search8rules", rng=None):
-        SearchBot.__init__(self, SEARCH8_DEPTH, rules_eval, name=name, rng=rng)
+    def __init__(self, name="search7rules", rng=None):
+        SearchBot.__init__(self, SEARCH7_DEPTH, rules_eval, name=name, rng=rng)

@@ -201,8 +201,8 @@ BOT_KINDS = {
     "hunter": HunterBot,
     "search1": searchBot.Search1Bot,
     "search2": searchBot.Search2Bot,
-    "search8value": searchBot.Search8ValueBot,
-    "search8rules": searchBot.Search8RulesBot,
+    "search7value": searchBot.Search7ValueBot,
+    "search7rules": searchBot.Search7RulesBot,
     "first": FirstBot,
     "resign": ResignBot,
 }

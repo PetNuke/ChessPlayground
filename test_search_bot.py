@@ -78,18 +78,20 @@ class SearchBotTests(unittest.TestCase):
         self.assertEqual(gs.getValidMoves(), [])
         self.assertTrue(headlessPlay.in_check(gs))
 
-    def test_depth_8_bots_use_requested_eval(self):
+    def test_depth_7_bots_use_requested_eval(self):
         value_bot, rules_bot = leoTournament.make_bots(
-            ["search8value", "search8rules"], seed=0)
-        self.assertEqual(value_bot.depth, 8)
-        self.assertEqual(rules_bot.depth, 8)
+            ["search7value", "search7rules"], seed=0)
+        self.assertEqual(value_bot.depth, 7)
+        self.assertEqual(rules_bot.depth, 7)
         self.assertIs(value_bot.eval_fn, searchBot.piece_value_eval)
         self.assertIs(rules_bot.eval_fn, searchBot.rules_eval)
         self.assertIsNone(value_bot.max_nodes)
         self.assertIsNone(rules_bot.max_nodes)
+        self.assertNotIn("search8value", leoTournament.BOT_KINDS)
+        self.assertNotIn("search8rules", leoTournament.BOT_KINDS)
         self.assertNotIn("search8random", leoTournament.BOT_KINDS)
 
-    def test_search8_krk_searches_beyond_old_node_cap(self):
+    def test_search7_krk_searches_beyond_old_node_cap(self):
         gs = ChessEngine.GameState()
         gs.board = [[ChessEngine.BLANK_SPACE] * 8 for _ in range(8)]
         gs.board[7][0] = "wK"
@@ -100,9 +102,10 @@ class SearchBotTests(unittest.TestCase):
         gs.blackCanCastleKing = False
         gs.blackCanCastleQueen = False
         gs.moveLog = []
-        bot = searchBot.Search8ValueBot(rng=random.Random(0))
+        bot = searchBot.Search7ValueBot(rng=random.Random(0))
         move = bot.choose(gs, gs.getValidMoves())
         self.assertIsNotNone(move)
+        self.assertEqual(bot.depth, 7)
         self.assertIsNone(bot.max_nodes)
         self.assertGreater(bot._nodes, 400)
 
@@ -121,8 +124,10 @@ class SearchBotTests(unittest.TestCase):
         self.assertEqual(len(bots), len(leoTournament.BOT_KINDS))
         names = [bot.name for bot in bots]
         self.assertEqual(len(names), len(set(names)))
-        self.assertIn("search8rules", names)
-        self.assertIn("search8value", names)
+        self.assertIn("search7rules", names)
+        self.assertIn("search7value", names)
+        self.assertNotIn("search8rules", names)
+        self.assertNotIn("search8value", names)
         self.assertNotIn("search8random", names)
         self.assertIn("hunter", names)
         self.assertIn("resign", names)
